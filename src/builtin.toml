@@ -1,0 +1,11 @@
+[prompt.classify]
+template = "Classify into the following labels: {{labels}}. Respond with only the label, nothing else."
+description = "Classify text into one of the given labels"
+
+[prompt.summarize]
+template = "Summarize in one sentence. No explanation, only the summary."
+description = "One-sentence summary"
+
+[prompt.translate]
+template = "Translate into {{lang}}. Respond with only the translation, nothing else."
+description = "Translate text into the specified language"

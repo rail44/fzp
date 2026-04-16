@@ -15,10 +15,14 @@ pub struct Cli {
     pub vars: Vec<String>,
 
     /// Model name
-    #[arg(long, short, default_value = "google/gemini-2.0-flash-lite-001")]
+    #[arg(long, short, default_value = "google/gemini-3.1-flash-lite-preview")]
     pub model: String,
 
     /// Number of concurrent requests
     #[arg(long, short = 'j', default_value_t = 8)]
     pub concurrency: usize,
+
+    /// List available prompts and exit
+    #[arg(long)]
+    pub list: bool,
 }

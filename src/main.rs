@@ -33,8 +33,15 @@ fn main() -> Result<()> {
         })
         .collect::<Result<_>>()?;
 
+    let config = preset::load_config()?;
+
+    if cli.list {
+        preset::list_prompts(&config);
+        return Ok(());
+    }
+
     let system_prompt =
-        preset::resolve_prompt(cli.prompt.as_deref(), cli.preset.as_deref(), &vars)?;
+        preset::resolve_prompt(cli.prompt.as_deref(), cli.preset.as_deref(), &vars, &config)?;
 
     let api_key = std::env::var("OPENROUTER_API_KEY").unwrap_or_default();
     if api_key.is_empty() {
