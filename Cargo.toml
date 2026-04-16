@@ -3,6 +3,8 @@ name = "fzp"
 version = "0.1.0"
 edition = "2021"
 description = "Fuzzy Processor - parallel LLM inference pipe filter"
+license = "MIT"
+repository = "https://github.com/rail44/fzp"
 
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"] }
