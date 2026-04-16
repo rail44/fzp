@@ -1,0 +1,15 @@
+{
+  "name": "fzp",
+  "owner": {
+    "name": "rail44"
+  },
+  "plugins": [
+    {
+      "name": "fzp",
+      "source": {
+        "source": "github",
+        "repo": "rail44/fzp"
+      }
+    }
+  ]
+}
