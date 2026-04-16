@@ -1,5 +1,5 @@
 use crate::api::ApiClient;
-use anyhow::Result;
+use anyhow::{bail, Result};
 use futures_util::StreamExt;
 use std::io::{BufRead, Write as IoWrite};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -81,11 +81,22 @@ pub async fn run(
             Some(Err(error)) => {
                 progress.failed.fetch_add(1, Ordering::Relaxed);
                 warn!("{error}");
+                if writeln!(output).is_err() {
+                    break;
+                }
             }
-            None => {}
+            None => {
+                if writeln!(output).is_err() {
+                    break;
+                }
+            }
         }
     }
 
+    let failed = progress.failed.load(Ordering::Relaxed);
     progress.print_summary();
+    if failed > 0 {
+        bail!("{failed} request(s) failed");
+    }
     Ok(())
 }

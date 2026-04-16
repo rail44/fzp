@@ -21,6 +21,3 @@ Thumbs.db
 *.log
 failures.jsonl
 /tmp/
-
-# Cache(将来のキャッシュ機能実装時に使用)
-.fzp-cache/
