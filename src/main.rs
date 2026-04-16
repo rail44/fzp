@@ -1,11 +1,12 @@
 mod api;
 mod cli;
+mod init;
 mod pipeline;
 mod preset;
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use clap::Parser;
-use cli::Cli;
+use cli::{Cli, Command};
 use std::io::{self, BufReader};
 use std::sync::Arc;
 
@@ -22,7 +23,13 @@ fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
-    let vars: Vec<(String, String)> = cli
+    if let Some(Command::Init) = cli.command {
+        return init::run();
+    }
+
+    let run = &cli.run;
+
+    let vars: Vec<(String, String)> = run
         .vars
         .iter()
         .map(|s| {
@@ -35,27 +42,27 @@ fn main() -> Result<()> {
 
     let config = preset::load_config()?;
 
-    if cli.list {
+    if run.list {
         preset::list_prompts(&config);
         return Ok(());
     }
 
     let system_prompt =
-        preset::resolve_prompt(cli.prompt.as_deref(), cli.preset.as_deref(), &vars, &config)?;
+        preset::resolve_prompt(run.prompt.as_deref(), run.preset.as_deref(), &vars, &config)?;
 
     let api_key = config
         .api_key
         .as_deref()
         .filter(|s| !s.is_empty())
-        .ok_or_else(|| anyhow::anyhow!("api_key not found in ~/.config/fzp/config.toml"))?;
+        .ok_or_else(|| anyhow::anyhow!("api_key not found. Run `fzp init` to set up config."))?;
 
     let base_url = config
         .base_url
         .as_deref()
         .unwrap_or("https://openrouter.ai/api/v1");
 
-    let model = cli.model.as_deref().or(config.model.as_deref()).ok_or_else(|| {
-        anyhow::anyhow!("model not specified. Set model in ~/.config/fzp/config.toml or use -m")
+    let model = run.model.as_deref().or(config.model.as_deref()).ok_or_else(|| {
+        anyhow::anyhow!("model not specified. Run `fzp init` or use -m")
     })?;
 
     let client = Arc::new(api::ApiClient::new(base_url, api_key.to_string(), model.to_string()));
@@ -66,7 +73,7 @@ fn main() -> Result<()> {
     rt.block_on(pipeline::run(
         &system_prompt,
         client,
-        cli.concurrency,
+        run.concurrency,
         input,
         output,
     ))?;

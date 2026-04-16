@@ -1,8 +1,24 @@
-use clap::Parser;
+use clap::{Args, Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "fzp", about = "Fuzzy Processor - parallel LLM inference pipe filter")]
+#[command(args_conflicts_with_subcommands = true)]
 pub struct Cli {
+    #[command(subcommand)]
+    pub command: Option<Command>,
+
+    #[command(flatten)]
+    pub run: RunArgs,
+}
+
+#[derive(Subcommand)]
+pub enum Command {
+    /// Initialize ~/.config/fzp/config.toml
+    Init,
+}
+
+#[derive(Args)]
+pub struct RunArgs {
     /// Inline prompt (e.g. "Classify into: bug, feature, question")
     pub prompt: Option<String>,
 
