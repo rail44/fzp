@@ -34,17 +34,17 @@ pub async fn run<C: ChatClient>(
         failed: AtomicUsize::new(0),
     });
 
-    let (tx, rx) = mpsc::channel::<(usize, String)>(concurrency * 2);
+    let (tx, rx) = mpsc::channel::<String>(concurrency * 2);
     tokio::task::spawn_blocking(move || {
-        for (line_num, line) in input.lines().enumerate() {
+        for (idx, line) in input.lines().enumerate() {
             match line {
                 Ok(l) => {
-                    if tx.blocking_send((line_num, l)).is_err() {
+                    if tx.blocking_send(l).is_err() {
                         break;
                     }
                 }
                 Err(e) => {
-                    warn!(line = line_num + 1, "read error: {e}");
+                    warn!(line = idx + 1, "read error: {e}");
                     break;
                 }
             }
@@ -53,23 +53,23 @@ pub async fn run<C: ChatClient>(
 
     let system_prompt = system_prompt.to_string();
     let mut stream = ReceiverStream::new(rx)
-        .map(|(line_num, line)| {
+        .map(|line| {
             let client = client.clone();
             let system_prompt = system_prompt.clone();
             async move {
                 if line.trim().is_empty() {
-                    return (line_num, None);
+                    return None;
                 }
 
                 match client.chat(&system_prompt, &line).await {
-                    Ok(response) => (line_num, Some(Ok(response))),
-                    Err(e) => (line_num, Some(Err(e.to_string()))),
+                    Ok(response) => Some(Ok(response)),
+                    Err(e) => Some(Err(e.to_string())),
                 }
             }
         })
         .buffered(concurrency);
 
-    while let Some((_line_num, result)) = stream.next().await {
+    while let Some(result) = stream.next().await {
         match result {
             Some(Ok(response)) => {
                 progress.success.fetch_add(1, Ordering::Relaxed);
