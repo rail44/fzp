@@ -1,0 +1,26 @@
+# Rust
+/target/
+Cargo.lock.bak
+**/*.rs.bk
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Runtime output
+*.log
+failures.jsonl
+/tmp/
+
+# Cache(将来のキャッシュ機能実装時に使用)
+.hunch-cache/
