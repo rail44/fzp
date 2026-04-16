@@ -94,7 +94,7 @@ pub fn list_prompts(config: &Config) {
 fn load_preset(name: &str, vars: &[(String, String)], config: &Config) -> Result<String> {
     let def = config.prompt.get(name).ok_or_else(|| {
         anyhow::anyhow!(
-            "prompt '{}' not found. Run `hunch --list` to see available prompts.",
+            "prompt '{}' not found. Run `fzp --list` to see available prompts.",
             name,
         )
     })?;

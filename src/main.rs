@@ -48,7 +48,7 @@ fn main() -> Result<()> {
         bail!("API key not found. Set the OPENROUTER_API_KEY environment variable.");
     }
 
-    let base_url = std::env::var("HUNCH_BASE_URL")
+    let base_url = std::env::var("FZP_BASE_URL")
         .unwrap_or_else(|_| "https://openrouter.ai/api/v1".to_string());
 
     let client = Arc::new(api::ApiClient::new(&base_url, api_key, cli.model));
