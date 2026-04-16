@@ -1,4 +1,4 @@
-use crate::api::ApiClient;
+use crate::api::ChatClient;
 use anyhow::{bail, Result};
 use futures_util::StreamExt;
 use std::io::{BufRead, Write as IoWrite};
@@ -22,9 +22,9 @@ impl Progress {
     }
 }
 
-pub async fn run(
+pub async fn run<C: ChatClient>(
     system_prompt: &str,
-    client: Arc<ApiClient>,
+    client: Arc<C>,
     concurrency: usize,
     input: Box<dyn BufRead + Send>,
     mut output: Box<dyn IoWrite + Send>,
@@ -99,4 +99,112 @@ pub async fn run(
         bail!("{failed} request(s) failed");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::BufReader;
+
+    struct MockClient {
+        handler: Box<dyn Fn(&str) -> Result<String> + Send + Sync>,
+    }
+
+    impl ChatClient for MockClient {
+        async fn chat(&self, _system_prompt: &str, user_message: &str) -> Result<String> {
+            (self.handler)(user_message)
+        }
+    }
+
+    fn ok_client() -> Arc<MockClient> {
+        Arc::new(MockClient {
+            handler: Box::new(|msg| Ok(format!("echo:{msg}"))),
+        })
+    }
+
+    fn failing_client() -> Arc<MockClient> {
+        Arc::new(MockClient {
+            handler: Box::new(|_| bail!("api error")),
+        })
+    }
+
+    fn run_pipeline(client: Arc<MockClient>, input: &'static str) -> (Result<()>, String) {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let output = Arc::new(std::sync::Mutex::new(Vec::<u8>::new()));
+        let output_clone = output.clone();
+
+        struct SharedWriter(Arc<std::sync::Mutex<Vec<u8>>>);
+        impl IoWrite for SharedWriter {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().unwrap().write(buf)
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let result = rt.block_on(run(
+            "test prompt",
+            client,
+            2,
+            Box::new(BufReader::new(input.as_bytes())),
+            Box::new(SharedWriter(output_clone)),
+        ));
+        let bytes = output.lock().unwrap().clone();
+        (result, String::from_utf8(bytes).unwrap())
+    }
+
+    #[test]
+    fn successful_lines() {
+        let (result, output) = run_pipeline(ok_client(), "hello\nworld\n");
+        assert!(result.is_ok());
+        let lines: Vec<&str> = output.lines().collect();
+        assert_eq!(lines, vec!["echo:hello", "echo:world"]);
+    }
+
+    #[test]
+    fn empty_lines_preserved() {
+        let (result, output) = run_pipeline(ok_client(), "hello\n\nworld\n");
+        assert!(result.is_ok());
+        let lines: Vec<&str> = output.lines().collect();
+        assert_eq!(lines.len(), 3);
+        assert_eq!(lines[0], "echo:hello");
+        assert_eq!(lines[1], "");
+        assert_eq!(lines[2], "echo:world");
+    }
+
+    #[test]
+    fn failed_lines_emit_empty() {
+        let (result, output) = run_pipeline(failing_client(), "hello\nworld\n");
+        assert!(result.is_err());
+        let lines: Vec<&str> = output.lines().collect();
+        assert_eq!(lines.len(), 2);
+        assert!(lines.iter().all(|l| l.is_empty()));
+    }
+
+    #[test]
+    fn output_line_count_matches_input() {
+        let client = Arc::new(MockClient {
+            handler: Box::new(|msg| {
+                if msg == "fail" {
+                    bail!("error")
+                } else {
+                    Ok(format!("ok:{msg}"))
+                }
+            }),
+        });
+        let (_, output) = run_pipeline(client, "a\nfail\nb\n\nc\n");
+        let lines: Vec<&str> = output.lines().collect();
+        assert_eq!(lines.len(), 5);
+    }
+
+    #[test]
+    fn newlines_in_response_normalized() {
+        let client = Arc::new(MockClient {
+            handler: Box::new(|_| Ok("line1\nline2\r\nline3".to_string())),
+        });
+        let (result, output) = run_pipeline(client, "test\n");
+        assert!(result.is_ok());
+        assert_eq!(output.trim(), "line1 line2 line3");
+    }
 }

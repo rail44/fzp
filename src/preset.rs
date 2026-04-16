@@ -118,3 +118,89 @@ fn user_config_path() -> Option<PathBuf> {
 fn config_path() -> PathBuf {
     user_config_path().unwrap_or_else(|| PathBuf::from(".config/fzp/config.toml"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_config() -> Config {
+        Config {
+            api_key: None,
+            base_url: None,
+            model: None,
+            prompt: HashMap::from([(
+                "greet".to_string(),
+                PromptDef {
+                    template: "Say hello in {{lang}}".to_string(),
+                    description: Some("Greeting".to_string()),
+                },
+            )]),
+        }
+    }
+
+    #[test]
+    fn resolve_inline_prompt() {
+        let config = test_config();
+        let result = resolve_prompt(Some("do something"), None, &[], &config).unwrap();
+        assert_eq!(result, "do something");
+    }
+
+    #[test]
+    fn resolve_preset_with_vars() {
+        let config = test_config();
+        let vars = vec![("lang".to_string(), "Japanese".to_string())];
+        let result = resolve_prompt(None, Some("greet"), &vars, &config).unwrap();
+        assert_eq!(result, "Say hello in Japanese");
+    }
+
+    #[test]
+    fn resolve_preset_not_found() {
+        let config = test_config();
+        let result = resolve_prompt(None, Some("nonexistent"), &[], &config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn resolve_both_inline_and_preset_errors() {
+        let config = test_config();
+        let result = resolve_prompt(Some("inline"), Some("greet"), &[], &config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn resolve_neither_inline_nor_preset_errors() {
+        let config = test_config();
+        let result = resolve_prompt(None, None, &[], &config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn builtin_toml_parses() {
+        let config: Config = toml::from_str(BUILTIN_TOML).unwrap();
+        assert!(config.prompt.contains_key("classify"));
+        assert!(config.prompt.contains_key("summarize"));
+        assert!(config.prompt.contains_key("translate"));
+        assert!(config.prompt.contains_key("normalize"));
+        assert!(config.prompt.contains_key("filter"));
+    }
+
+    #[test]
+    fn template_multiple_vars() {
+        let config = Config {
+            prompt: HashMap::from([(
+                "test".to_string(),
+                PromptDef {
+                    template: "{{a}} and {{b}}".to_string(),
+                    description: None,
+                },
+            )]),
+            ..Default::default()
+        };
+        let vars = vec![
+            ("a".to_string(), "foo".to_string()),
+            ("b".to_string(), "bar".to_string()),
+        ];
+        let result = resolve_prompt(None, Some("test"), &vars, &config).unwrap();
+        assert_eq!(result, "foo and bar");
+    }
+}

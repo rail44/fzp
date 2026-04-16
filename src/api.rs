@@ -27,6 +27,10 @@ struct Choice {
     message: Message,
 }
 
+pub trait ChatClient: Send + Sync + 'static {
+    fn chat(&self, system_prompt: &str, user_message: &str) -> impl std::future::Future<Output = Result<String>> + Send;
+}
+
 pub struct ApiClient {
     client: Client,
     endpoint: String,
@@ -51,7 +55,10 @@ impl ApiClient {
         }
     }
 
-    pub async fn chat(&self, system_prompt: &str, user_message: &str) -> Result<String> {
+}
+
+impl ChatClient for ApiClient {
+    async fn chat(&self, system_prompt: &str, user_message: &str) -> Result<String> {
         let request = ChatRequest {
             model: self.model.clone(),
             messages: vec![
