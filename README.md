@@ -14,10 +14,14 @@ cargo install fzp
 
 ## Setup
 
-Set your OpenRouter API key:
+fzp uses any OpenAI-compatible API. It's designed for lightweight, fast models.
 
 ```bash
-export OPENROUTER_API_KEY="your-key-here"
+export FZP_API_KEY="your-api-key"
+
+# Default endpoint is OpenRouter (https://openrouter.ai/api/v1)
+# Override with any OpenAI-compatible endpoint:
+export FZP_BASE_URL="https://api.example.com/v1"
 ```
 
 ## Usage

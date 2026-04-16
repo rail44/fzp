@@ -73,4 +73,4 @@ cat messages.txt | fzp -p normalize -v fields="name,topic,urgency"
 ## Prerequisites
 
 - `fzp` binary in PATH (`cargo install fzp`)
-- `OPENROUTER_API_KEY` environment variable set
+- `FZP_API_KEY` environment variable set (any OpenAI-compatible API key)

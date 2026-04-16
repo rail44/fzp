@@ -43,9 +43,9 @@ fn main() -> Result<()> {
     let system_prompt =
         preset::resolve_prompt(cli.prompt.as_deref(), cli.preset.as_deref(), &vars, &config)?;
 
-    let api_key = std::env::var("OPENROUTER_API_KEY").unwrap_or_default();
+    let api_key = std::env::var("FZP_API_KEY").unwrap_or_default();
     if api_key.is_empty() {
-        bail!("API key not found. Set the OPENROUTER_API_KEY environment variable.");
+        bail!("API key not found. Set the FZP_API_KEY environment variable.");
     }
 
     let base_url = std::env::var("FZP_BASE_URL")
