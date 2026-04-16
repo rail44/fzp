@@ -18,7 +18,7 @@ impl Progress {
         let success = self.success.load(Ordering::Relaxed);
         let failed = self.failed.load(Ordering::Relaxed);
         let total = success + failed;
-        eprintln!("hunch: {total} processed, {success} succeeded, {failed} failed");
+        eprintln!("fzp: {total} processed, {success} succeeded, {failed} failed");
     }
 }
 

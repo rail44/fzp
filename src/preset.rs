@@ -106,9 +106,9 @@ fn load_preset(name: &str, vars: &[(String, String)], config: &Config) -> Result
 }
 
 fn user_config_path() -> Option<PathBuf> {
-    dirs::home_dir().map(|h| h.join(".config/hunch/config.toml"))
+    dirs::home_dir().map(|h| h.join(".config/fzp/config.toml"))
 }
 
 fn config_path() -> PathBuf {
-    user_config_path().unwrap_or_else(|| PathBuf::from(".config/hunch/config.toml"))
+    user_config_path().unwrap_or_else(|| PathBuf::from(".config/fzp/config.toml"))
 }

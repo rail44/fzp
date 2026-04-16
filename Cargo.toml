@@ -1,8 +1,8 @@
 [package]
-name = "hunch"
+name = "fzp"
 version = "0.1.0"
 edition = "2021"
-description = "Parallel LLM inference pipe filter for lightweight tasks"
+description = "Fuzzy Processor - parallel LLM inference pipe filter"
 
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"] }

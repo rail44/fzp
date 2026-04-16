@@ -1,7 +1,7 @@
 use clap::Parser;
 
 #[derive(Parser)]
-#[command(name = "hunch", about = "Parallel LLM inference pipe filter")]
+#[command(name = "fzp", about = "Fuzzy Processor - parallel LLM inference pipe filter")]
 pub struct Cli {
     /// Inline prompt (e.g. "Classify into: bug, feature, question")
     pub prompt: Option<String>,
