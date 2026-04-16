@@ -14,9 +14,9 @@ pub struct Cli {
     #[arg(long = "var", short = 'v', value_name = "KEY=VALUE")]
     pub vars: Vec<String>,
 
-    /// Model name
-    #[arg(long, short, default_value = "google/gemini-3.1-flash-lite-preview")]
-    pub model: String,
+    /// Model name (overrides config.toml)
+    #[arg(long, short)]
+    pub model: Option<String>,
 
     /// Number of concurrent requests
     #[arg(long, short = 'j', default_value_t = 8)]

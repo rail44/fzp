@@ -7,6 +7,9 @@ static BUILTIN_TOML: &str = include_str!("builtin.toml");
 
 #[derive(Deserialize, Default)]
 pub struct Config {
+    pub api_key: Option<String>,
+    pub base_url: Option<String>,
+    pub model: Option<String>,
     #[serde(default)]
     pub prompt: HashMap<String, PromptDef>,
 }
@@ -34,6 +37,9 @@ pub fn load_config() -> Result<Config> {
 
     // User config overrides builtin
     let mut merged = builtin;
+    merged.api_key = user.api_key;
+    merged.base_url = user.base_url;
+    merged.model = user.model;
     for (name, def) in user.prompt {
         merged.prompt.insert(name, def);
     }

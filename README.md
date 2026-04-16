@@ -16,12 +16,14 @@ cargo install fzp
 
 fzp uses any OpenAI-compatible API. It's designed for lightweight, fast models.
 
-```bash
-export FZP_API_KEY="your-api-key"
+Create `~/.config/fzp/config.toml`:
 
-# Default endpoint is OpenRouter (https://openrouter.ai/api/v1)
-# Override with any OpenAI-compatible endpoint:
-export FZP_BASE_URL="https://api.example.com/v1"
+```toml
+api_key = "your-api-key"
+model = "google/gemini-3.1-flash-lite-preview"
+
+# Default: https://openrouter.ai/api/v1
+# base_url = "https://api.example.com/v1"
 ```
 
 ## Usage
@@ -40,7 +42,7 @@ export FZP_BASE_URL="https://api.example.com/v1"
 |------|-------------|---------|
 | `-p NAME` | Preset name | - |
 | `-v KEY=VALUE` | Template variable (repeatable) | - |
-| `-m MODEL` | Model override | `google/gemini-3.1-flash-lite-preview` |
+| `-m MODEL` | Model override | from config.toml |
 | `-j N` | Concurrency | 8 |
 | `--list` | List available presets | - |
 

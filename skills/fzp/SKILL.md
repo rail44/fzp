@@ -73,4 +73,4 @@ cat messages.txt | fzp -p normalize -v fields="name,topic,urgency"
 ## Prerequisites
 
 - `fzp` binary in PATH (`cargo install fzp`)
-- `FZP_API_KEY` environment variable set (any OpenAI-compatible API key)
+- `~/.config/fzp/config.toml` with `api_key` and `model` set

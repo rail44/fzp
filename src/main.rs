@@ -43,15 +43,22 @@ fn main() -> Result<()> {
     let system_prompt =
         preset::resolve_prompt(cli.prompt.as_deref(), cli.preset.as_deref(), &vars, &config)?;
 
-    let api_key = std::env::var("FZP_API_KEY").unwrap_or_default();
-    if api_key.is_empty() {
-        bail!("API key not found. Set the FZP_API_KEY environment variable.");
-    }
+    let api_key = config
+        .api_key
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("api_key not found in ~/.config/fzp/config.toml"))?;
 
-    let base_url = std::env::var("FZP_BASE_URL")
-        .unwrap_or_else(|_| "https://openrouter.ai/api/v1".to_string());
+    let base_url = config
+        .base_url
+        .as_deref()
+        .unwrap_or("https://openrouter.ai/api/v1");
 
-    let client = Arc::new(api::ApiClient::new(&base_url, api_key, cli.model));
+    let model = cli.model.as_deref().or(config.model.as_deref()).ok_or_else(|| {
+        anyhow::anyhow!("model not specified. Set model in ~/.config/fzp/config.toml or use -m")
+    })?;
+
+    let client = Arc::new(api::ApiClient::new(base_url, api_key.to_string(), model.to_string()));
     let input = Box::new(BufReader::new(io::stdin()));
     let output = Box::new(io::stdout());
 
