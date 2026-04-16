@@ -73,6 +73,7 @@ pub async fn run(
         match result {
             Some(Ok(response)) => {
                 progress.success.fetch_add(1, Ordering::Relaxed);
+                let response = response.replace('\n', " ").replace('\r', "");
                 if writeln!(output, "{response}").is_err() {
                     break; // SIGPIPE
                 }

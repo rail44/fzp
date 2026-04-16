@@ -9,3 +9,11 @@ description = "One-sentence summary"
 [prompt.translate]
 template = "Translate into {{lang}}. Respond with only the translation, nothing else."
 description = "Translate text into the specified language"
+
+[prompt.normalize]
+template = "Extract the following fields: {{fields}}. Respond with a single-line JSON object containing only these fields. If a field cannot be determined, use null. No explanation, no newlines, only compact JSON on one line."
+description = "Normalize unstructured text into structured JSON"
+
+[prompt.filter]
+template = "Does this text match the following condition: {{condition}}? Respond with only 1 (yes) or 0 (no), nothing else."
+description = "Filter by condition (outputs 1 or 0)"
