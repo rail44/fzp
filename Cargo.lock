@@ -455,7 +455,6 @@ dependencies = [
  "libc",
  "reqwest",
  "serde",
- "serde_json",
  "tokio",
  "tokio-stream",
  "toml",

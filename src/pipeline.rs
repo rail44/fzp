@@ -14,15 +14,11 @@ struct Progress {
 }
 
 impl Progress {
-    fn print(&self, finished: bool) {
+    fn print_summary(&self) {
         let success = self.success.load(Ordering::Relaxed);
         let failed = self.failed.load(Ordering::Relaxed);
         let total = success + failed;
-        if finished {
-            eprintln!("\rhunch: {total} processed, {success} succeeded, {failed} failed");
-        } else {
-            eprint!("\rhunch: {total} processed, {success} succeeded, {failed} failed");
-        }
+        eprintln!("hunch: {total} processed, {success} succeeded, {failed} failed");
     }
 }
 
@@ -87,9 +83,8 @@ pub async fn run(
             }
             None => {}
         }
-        progress.print(false);
     }
 
-    progress.print(true);
+    progress.print_summary();
     Ok(())
 }
