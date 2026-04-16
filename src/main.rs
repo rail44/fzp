@@ -6,8 +6,7 @@ mod preset;
 use anyhow::{bail, Result};
 use clap::Parser;
 use cli::Cli;
-use std::fs::File;
-use std::io::{self, BufRead, BufReader, BufWriter, Write};
+use std::io::{self, BufReader};
 use std::sync::Arc;
 
 fn main() -> Result<()> {
@@ -23,39 +22,39 @@ fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
-    let api_key = std::env::var(&cli.api_key_env).unwrap_or_default();
+    let vars: Vec<(String, String)> = cli
+        .vars
+        .iter()
+        .map(|s| {
+            let (k, v) = s
+                .split_once('=')
+                .ok_or_else(|| anyhow::anyhow!("invalid -v format: '{}', expected KEY=VALUE", s))?;
+            Ok((k.to_string(), v.to_string()))
+        })
+        .collect::<Result<_>>()?;
+
+    let system_prompt =
+        preset::resolve_prompt(cli.prompt.as_deref(), cli.preset.as_deref(), &vars)?;
+
+    let api_key = std::env::var("OPENROUTER_API_KEY").unwrap_or_default();
     if api_key.is_empty() {
-        bail!(
-            "API key not found. Set the {} environment variable.",
-            cli.api_key_env
-        );
+        bail!("API key not found. Set the OPENROUTER_API_KEY environment variable.");
     }
 
-    let client = Arc::new(api::ApiClient::new(&cli.base_url, api_key, cli.model));
+    let base_url = std::env::var("HUNCH_BASE_URL")
+        .unwrap_or_else(|_| "https://openrouter.ai/api/v1".to_string());
 
-    let input: Box<dyn BufRead + Send> = match &cli.input {
-        Some(path) => Box::new(BufReader::new(File::open(path)?)),
-        None => Box::new(BufReader::new(io::stdin())),
-    };
-
-    let output: Box<dyn Write + Send> = match &cli.output {
-        Some(path) => Box::new(BufWriter::new(File::create(path)?)),
-        None => Box::new(BufWriter::new(io::stdout())),
-    };
-
-    let failures: Option<Box<dyn Write + Send>> = match &cli.failures {
-        Some(path) => Some(Box::new(BufWriter::new(File::create(path)?))),
-        None => None,
-    };
+    let client = Arc::new(api::ApiClient::new(&base_url, api_key, cli.model));
+    let input = Box::new(BufReader::new(io::stdin()));
+    let output = Box::new(io::stdout());
 
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(pipeline::run(
-        &cli.task,
+        &system_prompt,
         client,
         cli.concurrency,
         input,
         output,
-        failures,
     ))?;
 
     Ok(())

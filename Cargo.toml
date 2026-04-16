@@ -16,3 +16,5 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 libc = "0.2"
 tokio-stream = "0.1"
+toml = "0.8"
+dirs = "6"

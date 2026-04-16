@@ -1,0 +1,8 @@
+[classify]
+prompt = "Classify into the following labels: {{labels}}. Respond with only the label, nothing else."
+
+[summarize]
+prompt = "Summarize in one sentence. No explanation, only the summary."
+
+[translate]
+prompt = "Translate into {{lang}}. Respond with only the translation, nothing else."
