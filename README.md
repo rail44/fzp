@@ -16,15 +16,11 @@ cargo install fzp
 
 fzp uses any OpenAI-compatible API. It's designed for lightweight, fast models.
 
-Create `~/.config/fzp/config.toml`:
-
-```toml
-api_key = "your-api-key"
-model = "google/gemini-3.1-flash-lite-preview"
-
-# Default: https://openrouter.ai/api/v1
-# base_url = "https://api.example.com/v1"
+```bash
+fzp init
 ```
+
+This creates `~/.config/fzp/config.toml` with your API key, model, and endpoint.
 
 ## Usage
 
