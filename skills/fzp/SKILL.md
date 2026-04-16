@@ -72,5 +72,5 @@ cat messages.txt | fzp -p normalize -v fields="name,topic,urgency"
 
 ## Prerequisites
 
-- `fzp` binary in PATH (`cargo install --path .` from the fzp repo)
+- `fzp` binary in PATH (`cargo install fzp`)
 - `OPENROUTER_API_KEY` environment variable set
