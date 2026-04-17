@@ -35,7 +35,7 @@ pub struct RunArgs {
     pub model: Option<String>,
 
     /// Number of concurrent requests
-    #[arg(long, short = 'j', default_value_t = 8)]
+    #[arg(long, short = 'j', default_value_t = 64)]
     pub concurrency: usize,
 
     /// List available prompts and exit

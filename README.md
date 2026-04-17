@@ -42,7 +42,7 @@ This creates `~/.config/fzp/config.toml` with your API key, model, and endpoint.
 | `-p NAME` | Preset name | - |
 | `-v KEY=VALUE` | Template variable (repeatable) | - |
 | `-m MODEL` | Model override | from config.toml |
-| `-j N` | Concurrency | 8 |
+| `-j N` | Concurrency | 64 |
 | `--list` | List available presets | - |
 
 ### Built-in presets
