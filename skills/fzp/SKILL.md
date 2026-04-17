@@ -1,31 +1,34 @@
 ---
 name: fzp
 description: |
-  Parallel LLM pipe filter for processing 10+ independent text items using a
-  lightweight model. Reads plain text lines from stdin, sends each to an LLM in
-  parallel, writes results to stdout preserving input order. Use this to offload
-  bulk classification, summarization, translation, filtering, and normalization
-  from your context.
+  This skill should be used when the user needs to "classify items",
+  "summarize many lines", "translate a list", "filter text by condition",
+  "normalize data to JSON", or process 10+ independent text items in bulk
+  through a lightweight LLM. Also trigger when the user mentions "fzp",
+  "parallel LLM processing", "pipe filter", or wants to offload bulk
+  text processing from the current context. Even if the user doesn't
+  mention fzp by name, use this skill whenever batch text classification,
+  summarization, translation, filtering, or normalization is needed.
 ---
 
 # fzp (Fuzzy Processor)
 
-Process many text lines in parallel through a lightweight LLM. One input line produces one output line.
+Parallel LLM pipe filter. One input line produces one output line, processed in parallel through a lightweight model.
 
 ## When to use
 
 - 10+ independent items to process
 - Each item needs a lightweight judgment (< 5 seconds)
-- Results are short (label, sentence, JSON)
-- You don't need all results in your context (use jq/awk to aggregate)
+- Results are short (label, sentence, compact JSON)
+- Aggregation via jq/awk/sort is sufficient (no need for all results in context)
 - Read-only tasks only (no code changes)
 
 ## When NOT to use
 
-- Fewer than 10 items (do it directly)
-- Tasks requiring multi-turn reasoning
+- Fewer than 10 items (process directly in context)
+- Tasks requiring multi-turn reasoning or cross-item dependencies
 - Code modifications
-- Tasks with dependencies between items
+- Tasks where every result must be in context for further reasoning
 
 ## Basic usage
 
@@ -36,7 +39,7 @@ Process many text lines in parallel through a lightweight LLM. One input line pr
 # Named preset
 <data> | fzp -p classify -v labels="bug,feature,question"
 
-# Preset + extra instruction
+# Preset + extra instruction (combine preset with additional prompt)
 <data> | fzp -p summarize "Respond in Japanese"
 ```
 
@@ -44,18 +47,25 @@ Process many text lines in parallel through a lightweight LLM. One input line pr
 
 Run `fzp --list` to see all. Builtins:
 
-- `classify` - Assign one label from a set. Vars: `labels`
-- `summarize` - One-sentence summary
-- `translate` - Translate text. Vars: `lang`
-- `normalize` - Extract fields as compact JSON. Vars: `fields`
-- `filter` - Output 1 (match) or 0 (no match). Vars: `condition`
+| Preset | Description | Variables |
+|--------|-------------|-----------|
+| `classify` | Assign one label from a set | `labels` |
+| `summarize` | One-sentence summary | - |
+| `translate` | Translate text | `lang` |
+| `normalize` | Extract fields as compact JSON | `fields` |
+| `filter` | Output 1 (match) or 0 (no match) | `condition` |
+
+Combine any preset with an extra inline prompt for additional instructions (e.g., language, format constraints).
 
 ## Options
 
-- `-p NAME` preset name
-- `-v KEY=VALUE` template variable (repeatable)
-- `-m MODEL` model override
-- `-j N` concurrency (default: 8)
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-p NAME` | Preset name | - |
+| `-v KEY=VALUE` | Template variable (repeatable) | - |
+| `-m MODEL` | Model override | from config.toml |
+| `-j N` | Concurrency | 64 |
+| `--list` | List available presets | - |
 
 ## Pipeline patterns
 
@@ -63,17 +73,28 @@ Run `fzp --list` to see all. Builtins:
 # Classify and count
 cat items.txt | fzp -p classify -v labels="bug,feature,question" | sort | uniq -c
 
-# Filter with paste
-paste items.txt <(cat items.txt | fzp -p filter -v condition="security-related") | awk -F'\t' '$2 == "1"' | cut -f1
+# Filter matching lines
+paste items.txt <(cat items.txt | fzp -p filter -v condition="security-related") \
+  | awk -F'\t' '$2 == "1"' | cut -f1
 
-# Summarize functions
-rg -n '^func ' --type go | xargs -I{} sh -c 'echo "$1"' _ {} | fzp "One-line summary of this Go function"
+# Summarize with language override
+cat messages.txt | fzp -p summarize "Respond in Japanese"
 
 # Normalize to JSON
 cat messages.txt | fzp -p normalize -v fields="name,topic,urgency"
+
+# Translate
+cat items.txt | fzp -p translate -v lang="French"
 ```
+
+## Error handling
+
+- Failed lines emit an empty line to preserve line alignment with input
+- Errors are logged to stderr per line
+- Process exits non-zero if any requests failed
+- Summary printed to stderr: `fzp: N processed, M succeeded, K failed`
 
 ## Prerequisites
 
 - `fzp` binary in PATH (`cargo install fzp`)
-- `~/.config/fzp/config.toml` with `api_key` and `model` set
+- `~/.config/fzp/config.toml` with `api_key` and `model` set (run `fzp init` to create)
