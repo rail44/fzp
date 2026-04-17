@@ -55,7 +55,10 @@ pub fn resolve_prompt(
     match (inline, preset_name) {
         (Some(prompt), None) => Ok(prompt.to_string()),
         (None, Some(name)) => load_preset(name, vars, config),
-        (Some(_), Some(_)) => bail!("cannot specify both inline prompt and --preset"),
+        (Some(extra), Some(name)) => {
+            let base = load_preset(name, vars, config)?;
+            Ok(format!("{base}\n{extra}"))
+        }
         (None, None) => bail!("specify a prompt or use --preset"),
     }
 }
@@ -161,10 +164,11 @@ mod tests {
     }
 
     #[test]
-    fn resolve_both_inline_and_preset_errors() {
+    fn resolve_preset_with_extra_prompt() {
         let config = test_config();
-        let result = resolve_prompt(Some("inline"), Some("greet"), &[], &config);
-        assert!(result.is_err());
+        let vars = vec![("lang".to_string(), "Japanese".to_string())];
+        let result = resolve_prompt(Some("Be concise"), Some("greet"), &vars, &config).unwrap();
+        assert_eq!(result, "Say hello in Japanese\nBe concise");
     }
 
     #[test]

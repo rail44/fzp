@@ -35,6 +35,9 @@ Process many text lines in parallel through a lightweight LLM. One input line pr
 
 # Named preset
 <data> | fzp -p classify -v labels="bug,feature,question"
+
+# Preset + extra instruction
+<data> | fzp -p summarize "Respond in Japanese"
 ```
 
 ## Available presets

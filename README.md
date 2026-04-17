@@ -30,6 +30,9 @@ This creates `~/.config/fzp/config.toml` with your API key, model, and endpoint.
 
 # Named preset
 <data> | fzp -p classify -v labels="bug,feature,question"
+
+# Preset + extra instruction
+<data> | fzp -p summarize "Respond in Japanese"
 ```
 
 ### Options
