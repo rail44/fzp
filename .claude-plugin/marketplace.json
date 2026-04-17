@@ -1,0 +1,13 @@
+{
+  "name": "fzp",
+  "owner": {
+    "name": "rail44"
+  },
+  "plugins": [
+    {
+      "name": "fzp",
+      "source": "./.claude-plugin",
+      "description": "Fuzzy Processor - parallel LLM inference pipe filter"
+    }
+  ]
+}
