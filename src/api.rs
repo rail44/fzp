@@ -74,7 +74,7 @@ impl ChatClient for ApiClient {
             temperature: 0.0,
         };
 
-        let max_retries = 3;
+        let max_retries: u32 = 10;
         for attempt in 1..=max_retries {
             let resp = self
                 .client
@@ -97,9 +97,23 @@ impl ChatClient for ApiClient {
                 return Ok(content.trim().to_string());
             }
 
-            let retryable = status.as_u16() == 429 || status.is_server_error();
+            let is_rate_limited = status.as_u16() == 429;
+            let retryable = is_rate_limited || status.is_server_error();
             if retryable && attempt < max_retries {
-                let delay = Duration::from_millis(500 * 2u64.pow(attempt as u32 - 1));
+                let delay = if is_rate_limited {
+                    let retry_after = resp
+                        .headers()
+                        .get("retry-after")
+                        .and_then(|v| v.to_str().ok())
+                        .and_then(|v| v.parse::<u64>().ok());
+                    if let Some(secs) = retry_after {
+                        Duration::from_secs(secs.min(60))
+                    } else {
+                        Duration::from_secs((1u64 << (attempt - 1).min(4)).min(30))
+                    }
+                } else {
+                    Duration::from_millis(500 * 2u64.pow((attempt - 1).min(3)))
+                };
                 warn!(status = status.as_u16(), attempt, "retrying after {:?}", delay);
                 tokio::time::sleep(delay).await;
                 continue;
