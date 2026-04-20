@@ -1,5 +1,5 @@
 {
   "name": "fzp",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Fuzzy Processor - parallel LLM inference pipe filter for Claude Code"
 }
