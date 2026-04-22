@@ -1,7 +1,8 @@
 use anyhow::{bail, Context, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::warn;
 
 #[derive(Serialize)]
@@ -36,6 +37,8 @@ pub struct ApiClient {
     endpoint: String,
     auth_header: String,
     model: String,
+    /// Unix timestamp in milliseconds until which requests should be paused (shared across all tasks)
+    rate_limit_until_ms: AtomicU64,
 }
 
 impl ApiClient {
@@ -52,9 +55,60 @@ impl ApiClient {
             endpoint,
             auth_header,
             model,
+            rate_limit_until_ms: AtomicU64::new(0),
         }
     }
 
+    async fn wait_for_rate_limit(&self) {
+        let until_ms = self.rate_limit_until_ms.load(Ordering::Relaxed);
+        if until_ms == 0 {
+            return;
+        }
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        if now_ms < until_ms {
+            let wait = Duration::from_millis(until_ms - now_ms);
+            tokio::time::sleep(wait).await;
+        }
+    }
+
+    fn update_rate_limit(&self, resp: &reqwest::Response) {
+        // Try X-RateLimit-Reset (Unix timestamp in ms, used by OpenRouter)
+        if let Some(reset_ms) = resp
+            .headers()
+            .get("x-ratelimit-reset")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<u64>().ok())
+        {
+            self.rate_limit_until_ms.fetch_max(reset_ms, Ordering::Relaxed);
+            return;
+        }
+
+        // Fall back to Retry-After (seconds)
+        if let Some(secs) = resp
+            .headers()
+            .get("retry-after")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<u64>().ok())
+        {
+            let now_ms = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64;
+            let until_ms = now_ms + secs.min(60) * 1000;
+            self.rate_limit_until_ms.fetch_max(until_ms, Ordering::Relaxed);
+            return;
+        }
+
+        // No header: set a fallback pause of 2 seconds from now
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        self.rate_limit_until_ms.fetch_max(now_ms + 2000, Ordering::Relaxed);
+    }
 }
 
 impl ChatClient for ApiClient {
@@ -76,6 +130,9 @@ impl ChatClient for ApiClient {
 
         let max_retries: u32 = 10;
         for attempt in 1..=max_retries {
+            // Wait if a rate limit is globally active
+            self.wait_for_rate_limit().await;
+
             let resp = self
                 .client
                 .post(&self.endpoint)
@@ -100,22 +157,14 @@ impl ChatClient for ApiClient {
             let is_rate_limited = status.as_u16() == 429;
             let retryable = is_rate_limited || status.is_server_error();
             if retryable && attempt < max_retries {
-                let delay = if is_rate_limited {
-                    let retry_after = resp
-                        .headers()
-                        .get("retry-after")
-                        .and_then(|v| v.to_str().ok())
-                        .and_then(|v| v.parse::<u64>().ok());
-                    if let Some(secs) = retry_after {
-                        Duration::from_secs(secs.min(60))
-                    } else {
-                        Duration::from_secs((1u64 << (attempt - 1).min(4)).min(30))
-                    }
+                if is_rate_limited {
+                    self.update_rate_limit(&resp);
+                    self.wait_for_rate_limit().await;
                 } else {
-                    Duration::from_millis(500 * 2u64.pow((attempt - 1).min(3)))
-                };
-                warn!(status = status.as_u16(), attempt, "retrying after {:?}", delay);
-                tokio::time::sleep(delay).await;
+                    let delay = Duration::from_millis(500 * 2u64.pow((attempt - 1).min(3)));
+                    warn!(status = status.as_u16(), attempt, "retrying after {:?}", delay);
+                    tokio::time::sleep(delay).await;
+                }
                 continue;
             }
 
