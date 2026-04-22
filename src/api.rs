@@ -60,18 +60,6 @@ impl ApiClient {
         }
     }
 
-    /// Establish TCP + TLS + HTTP/2 connection before the pipeline starts
-    pub async fn warm_up(&self) -> Result<()> {
-        let _ = self
-            .client
-            .head(&self.endpoint)
-            .header("Authorization", &self.auth_header)
-            .send()
-            .await
-            .context("failed to warm up connection")?;
-        Ok(())
-    }
-
     async fn wait_for_rate_limit(&self) {
         let until_ms = self.rate_limit_until_ms.load(Ordering::Relaxed);
         if until_ms == 0 {

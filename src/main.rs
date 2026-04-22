@@ -70,7 +70,6 @@ fn main() -> Result<()> {
     let output = Box::new(io::stdout());
 
     let rt = tokio::runtime::Runtime::new()?;
-    rt.block_on(client.warm_up())?;
     rt.block_on(pipeline::run(
         &system_prompt,
         client,
