@@ -51,7 +51,7 @@ pub async fn run<C: ChatClient>(
         }
     });
 
-    let system_prompt = system_prompt.to_string();
+    let system_prompt: Arc<str> = system_prompt.into();
     let mut stream = ReceiverStream::new(rx)
         .map(|line| {
             let client = client.clone();

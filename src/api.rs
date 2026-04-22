@@ -12,7 +12,7 @@ struct ChatRequest {
     temperature: f32,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 struct Message {
     role: String,
     content: String,
@@ -31,6 +31,7 @@ struct Choice {
 pub trait ChatClient: Send + Sync + 'static {
     fn chat(&self, system_prompt: &str, user_message: &str) -> impl std::future::Future<Output = Result<String>> + Send;
 }
+
 
 pub struct ApiClient {
     client: Client,
@@ -57,6 +58,18 @@ impl ApiClient {
             model,
             rate_limit_until_ms: AtomicU64::new(0),
         }
+    }
+
+    /// Establish TCP + TLS + HTTP/2 connection before the pipeline starts
+    pub async fn warm_up(&self) -> Result<()> {
+        let _ = self
+            .client
+            .head(&self.endpoint)
+            .header("Authorization", &self.auth_header)
+            .send()
+            .await
+            .context("failed to warm up connection")?;
+        Ok(())
     }
 
     async fn wait_for_rate_limit(&self) {
