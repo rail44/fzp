@@ -1,12 +1,15 @@
 use crate::api::ChatClient;
 use anyhow::{bail, Result};
 use futures_util::StreamExt;
+use rustc_hash::FxHashMap;
 use std::io::{BufRead, Write as IoWrite};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::warn;
+
+pub type LineCache = Arc<Mutex<FxHashMap<String, String>>>;
 
 struct Progress {
     success: AtomicUsize,
@@ -26,6 +29,7 @@ pub async fn run<C: ChatClient>(
     system_prompt: &str,
     client: Arc<C>,
     concurrency: usize,
+    cache: Option<LineCache>,
     input: Box<dyn BufRead + Send>,
     mut output: Box<dyn IoWrite + Send>,
 ) -> Result<()> {
@@ -56,13 +60,33 @@ pub async fn run<C: ChatClient>(
         .map(|line| {
             let client = client.clone();
             let system_prompt = system_prompt.clone();
+            let cache = cache.clone();
             async move {
                 if line.trim().is_empty() {
                     return None;
                 }
 
+                if let Some(c) = &cache
+                    && let Some(hit) = c.lock().unwrap().get(&line).cloned()
+                {
+                    return Some(Ok(hit));
+                }
+
                 match client.chat(&system_prompt, &line).await {
-                    Ok(response) => Some(Ok(response)),
+                    Ok(response) => {
+                        if let Some(c) = &cache {
+                            // first-writer-wins: if another task inserted while we were
+                            // awaiting, drop our result and adopt the existing one.
+                            let entry = c
+                                .lock()
+                                .unwrap()
+                                .entry(line)
+                                .or_insert_with(|| response.clone())
+                                .clone();
+                            return Some(Ok(entry));
+                        }
+                        Some(Ok(response))
+                    }
                     Err(e) => Some(Err(e.to_string())),
                 }
             }
@@ -129,6 +153,14 @@ mod tests {
     }
 
     fn run_pipeline(client: Arc<MockClient>, input: &'static str) -> (Result<()>, String) {
+        run_pipeline_with(client, input, None)
+    }
+
+    fn run_pipeline_with(
+        client: Arc<MockClient>,
+        input: &'static str,
+        cache: Option<LineCache>,
+    ) -> (Result<()>, String) {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let output = Arc::new(std::sync::Mutex::new(Vec::<u8>::new()));
         let output_clone = output.clone();
@@ -147,6 +179,7 @@ mod tests {
             "test prompt",
             client,
             2,
+            cache,
             Box::new(BufReader::new(input.as_bytes())),
             Box::new(SharedWriter(output_clone)),
         ));
@@ -206,5 +239,51 @@ mod tests {
         let (result, output) = run_pipeline(client, "test\n");
         assert!(result.is_ok());
         assert_eq!(output.trim(), "line1 line2 line3");
+    }
+
+    fn counting_client() -> (Arc<MockClient>, Arc<AtomicUsize>) {
+        let count = Arc::new(AtomicUsize::new(0));
+        let count_clone = count.clone();
+        let client = Arc::new(MockClient {
+            handler: Box::new(move |msg| {
+                count_clone.fetch_add(1, Ordering::Relaxed);
+                Ok(format!("echo:{msg}"))
+            }),
+        });
+        (client, count)
+    }
+
+    #[test]
+    fn cache_dedups_repeated_lines() {
+        let (client, count) = counting_client();
+        let cache: LineCache = Arc::new(Mutex::new(FxHashMap::default()));
+        let (result, output) = run_pipeline_with(client, "a\na\na\n", Some(cache));
+        assert!(result.is_ok());
+        let lines: Vec<&str> = output.lines().collect();
+        assert_eq!(lines, vec!["echo:a", "echo:a", "echo:a"]);
+        // Allow up to 2 calls because concurrent tasks may race past the lookup
+        // before the first writer inserts. With concurrency=2 and 3 lines this
+        // is the realistic upper bound.
+        let calls = count.load(Ordering::Relaxed);
+        assert!(calls <= 2, "expected at most 2 API calls, got {calls}");
+    }
+
+    #[test]
+    fn cache_disabled_calls_per_line() {
+        let (client, count) = counting_client();
+        let (result, _) = run_pipeline_with(client, "a\na\na\n", None);
+        assert!(result.is_ok());
+        assert_eq!(count.load(Ordering::Relaxed), 3);
+    }
+
+    #[test]
+    fn cache_does_not_collapse_distinct_lines() {
+        let (client, count) = counting_client();
+        let cache: LineCache = Arc::new(Mutex::new(FxHashMap::default()));
+        let (result, output) = run_pipeline_with(client, "a\nb\nc\n", Some(cache));
+        assert!(result.is_ok());
+        let lines: Vec<&str> = output.lines().collect();
+        assert_eq!(lines, vec!["echo:a", "echo:b", "echo:c"]);
+        assert_eq!(count.load(Ordering::Relaxed), 3);
     }
 }

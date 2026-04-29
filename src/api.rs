@@ -6,10 +6,33 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::warn;
 
 #[derive(Serialize)]
-struct ChatRequest {
-    model: String,
+struct ChatRequest<'a> {
+    model: &'a str,
     messages: Vec<Message>,
     temperature: f32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_format: Option<&'a ResponseFormat>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    provider: Option<ProviderRouting>,
+}
+
+#[derive(Serialize)]
+struct ResponseFormat {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    json_schema: JsonSchemaSpec,
+}
+
+#[derive(Serialize)]
+struct JsonSchemaSpec {
+    name: &'static str,
+    strict: bool,
+    schema: serde_json::Value,
+}
+
+#[derive(Serialize)]
+struct ProviderRouting {
+    require_parameters: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -36,14 +59,21 @@ pub trait ChatClient: Send + Sync + 'static {
 pub struct ApiClient {
     client: Client,
     endpoint: String,
+    api_key: String,
     auth_header: String,
     model: String,
+    response_format: Option<ResponseFormat>,
     /// Unix timestamp in milliseconds until which requests should be paused (shared across all tasks)
     rate_limit_until_ms: AtomicU64,
 }
 
 impl ApiClient {
-    pub fn new(base_url: &str, api_key: String, model: String) -> Self {
+    pub fn new(
+        base_url: &str,
+        api_key: String,
+        model: String,
+        output_schema: Option<serde_json::Value>,
+    ) -> Self {
         let base = base_url.trim_end_matches('/');
         let endpoint = format!("{base}/chat/completions");
         let auth_header = format!("Bearer {api_key}");
@@ -51,13 +81,33 @@ impl ApiClient {
             .timeout(Duration::from_secs(60))
             .build()
             .expect("failed to build HTTP client");
+        let response_format = output_schema.map(|schema| ResponseFormat {
+            kind: "json_schema",
+            json_schema: JsonSchemaSpec {
+                name: "fzp_output",
+                strict: true,
+                schema,
+            },
+        });
         Self {
             client,
             endpoint,
+            api_key,
             auth_header,
             model,
+            response_format,
             rate_limit_until_ms: AtomicU64::new(0),
         }
+    }
+
+    /// Replace the configured API key with `***` in the given text. Used before
+    /// emitting upstream error bodies so a 4xx echo of the request can never
+    /// leak the secret to logs or stderr.
+    fn redact(&self, text: &str) -> String {
+        if self.api_key.is_empty() {
+            return text.to_string();
+        }
+        text.replace(&self.api_key, "***")
     }
 
     async fn wait_for_rate_limit(&self) {
@@ -115,7 +165,7 @@ impl ApiClient {
 impl ChatClient for ApiClient {
     async fn chat(&self, system_prompt: &str, user_message: &str) -> Result<String> {
         let request = ChatRequest {
-            model: self.model.clone(),
+            model: &self.model,
             messages: vec![
                 Message {
                     role: "system".to_string(),
@@ -127,6 +177,11 @@ impl ChatClient for ApiClient {
                 },
             ],
             temperature: 0.0,
+            response_format: self.response_format.as_ref(),
+            provider: self
+                .response_format
+                .is_some()
+                .then_some(ProviderRouting { require_parameters: true }),
         };
 
         let max_retries: u32 = 10;
@@ -170,9 +225,95 @@ impl ChatClient for ApiClient {
             }
 
             let body = resp.text().await.unwrap_or_default();
+            let body = self.redact(&body);
             bail!("API error {status}: {body}");
         }
 
         unreachable!()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_client(api_key: &str) -> ApiClient {
+        ApiClient::new(
+            "https://example.com",
+            api_key.to_string(),
+            "m".to_string(),
+            None,
+        )
+    }
+
+    #[test]
+    fn redact_replaces_api_key() {
+        let client = make_client("sk-secret-123");
+        let out = client.redact(r#"{"error": "bad token: sk-secret-123"}"#);
+        assert_eq!(out, r#"{"error": "bad token: ***"}"#);
+    }
+
+    #[test]
+    fn redact_passes_through_when_key_absent() {
+        let client = make_client("");
+        let out = client.redact("anything goes here");
+        assert_eq!(out, "anything goes here");
+    }
+
+    #[test]
+    fn redact_handles_multiple_occurrences() {
+        let client = make_client("k");
+        let out = client.redact("k and k and k");
+        assert_eq!(out, "*** and *** and ***");
+    }
+
+    #[test]
+    fn request_serializes_without_response_format_by_default() {
+        let client = ApiClient::new(
+            "https://example.com",
+            "k".to_string(),
+            "m".to_string(),
+            None,
+        );
+        let request = ChatRequest {
+            model: &client.model,
+            messages: vec![],
+            temperature: 0.0,
+            response_format: client.response_format.as_ref(),
+            provider: client
+                .response_format
+                .is_some()
+                .then_some(ProviderRouting { require_parameters: true }),
+        };
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(!json.contains("response_format"));
+        assert!(!json.contains("provider"));
+    }
+
+    #[test]
+    fn request_serializes_response_format_when_schema_set() {
+        let schema = serde_json::json!({"type": "object"});
+        let client = ApiClient::new(
+            "https://example.com",
+            "k".to_string(),
+            "m".to_string(),
+            Some(schema),
+        );
+        let request = ChatRequest {
+            model: &client.model,
+            messages: vec![],
+            temperature: 0.0,
+            response_format: client.response_format.as_ref(),
+            provider: client
+                .response_format
+                .is_some()
+                .then_some(ProviderRouting { require_parameters: true }),
+        };
+        let v: serde_json::Value = serde_json::from_str(&serde_json::to_string(&request).unwrap()).unwrap();
+        assert_eq!(v["response_format"]["type"], "json_schema");
+        assert_eq!(v["response_format"]["json_schema"]["name"], "fzp_output");
+        assert_eq!(v["response_format"]["json_schema"]["strict"], true);
+        assert_eq!(v["response_format"]["json_schema"]["schema"]["type"], "object");
+        assert_eq!(v["provider"]["require_parameters"], true);
     }
 }

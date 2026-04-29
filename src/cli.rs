@@ -41,4 +41,8 @@ pub struct RunArgs {
     /// List available prompts and exit
     #[arg(long)]
     pub list: bool,
+
+    /// Dedup identical input lines within this invocation (skip duplicate API calls)
+    #[arg(long)]
+    pub cache: bool,
 }

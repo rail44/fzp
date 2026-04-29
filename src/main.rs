@@ -7,8 +7,9 @@ mod preset;
 use anyhow::Result;
 use clap::Parser;
 use cli::{Cli, Command};
+use rustc_hash::FxHashMap;
 use std::io::{self, BufReader};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 fn main() -> Result<()> {
     reset_sigpipe();
@@ -47,14 +48,10 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let system_prompt =
+    let resolved =
         preset::resolve_prompt(run.prompt.as_deref(), run.preset.as_deref(), &vars, &config)?;
 
-    let api_key = config
-        .api_key
-        .as_deref()
-        .filter(|s| !s.is_empty())
-        .ok_or_else(|| anyhow::anyhow!("api_key not found. Run `fzp init` to set up config."))?;
+    let api_key = preset::resolve_api_key(&config)?;
 
     let base_url = config
         .base_url
@@ -65,15 +62,24 @@ fn main() -> Result<()> {
         anyhow::anyhow!("model not specified. Run `fzp init` or use -m")
     })?;
 
-    let client = Arc::new(api::ApiClient::new(base_url, api_key.to_string(), model.to_string()));
+    let client = Arc::new(api::ApiClient::new(
+        base_url,
+        api_key,
+        model.to_string(),
+        resolved.output_schema,
+    ));
+    let cache = run
+        .cache
+        .then(|| Arc::new(Mutex::new(FxHashMap::default())));
     let input = Box::new(BufReader::new(io::stdin()));
     let output = Box::new(io::stdout());
 
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(pipeline::run(
-        &system_prompt,
+        &resolved.system_prompt,
         client,
         run.concurrency,
+        cache,
         input,
         output,
     ))?;
